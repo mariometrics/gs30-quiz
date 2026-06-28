@@ -1,0 +1,13 @@
+{
+  "name": "quiz-30-compleanno",
+  "version": "1.0.0",
+  "description": "Quiz live per compleanno di 30 anni",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
