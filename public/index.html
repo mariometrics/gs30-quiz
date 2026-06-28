@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Il Quiz dei 30 Anni!</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --primary: #f97316;
+            --primary-hover: #ea580c;
+            --primary-light: #ffedd5;
+            --background: #fff7ed;
+            --card-bg: #ffffff;
+            --text: #431407;
+            --text-light: #7c2d12;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: var(--background); color: var(--text); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .screen { display: none; background: var(--card-bg); padding: 32px 24px; border-radius: 20px; box-shadow: 0 10px 25px rgba(249, 115, 22, 0.08); width: 100%; max-width: 440px; }
+        .question-counter { text-align: center; font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        #options-container { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
+        .option-btn { background: #fff7ed; color: var(--text); border: 2px solid #fed7aa; text-align: left; padding: 18px; font-weight: 600; border-radius: 12px; font-size: 16px; outline: none; width: 100%; }
+        .option-btn:disabled { opacity: 0.6; }
+        .option-btn.selected { background: #fdba74; border-color: var(--primary); }
+        .timer-box { font-size: 20px; font-weight: 800; color: var(--primary); background: var(--primary-light); padding: 10px; border-radius: 10px; text-align: center; margin-top: 15px; }
+        .my-position-badge { background: #eff6ff; border: 2px solid #bfdbfe; color: #1e40af; padding: 12px; border-radius: 12px; text-align: center; font-weight: 700; font-size: 16px; margin-bottom: 15px; display: none; }
+        .podium-container { display: none; align-items: flex-end; justify-content: center; height: 140px; margin: 20px 0; gap: 10px; }
+        .podium-step { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 85px; border-radius: 10px 10px 0 0; color: white; font-weight: bold; padding-bottom: 10px; text-align: center; font-size: 12px; }
+        .podium-step span { display: block; font-size: 10px; opacity: 0.9; }
+        .step-2 { background: #cbd5e1; height: 90px; color: #1e293b; }
+        .step-1 { background: #fbbf24; height: 130px; color: #78350f; }
+        .step-3 { background: #b45309; height: 65px; }
+        input[type="text"] { width: 100%; padding: 14px; margin-bottom: 16px; border: 2px solid #ffedd5; background: #fffaf5; border-radius: 12px; outline: none; font-size: 16px; }
+        button#btn-join { width: 100%; padding: 16px; font-size: 16px; font-weight: 600; border: none; border-radius: 12px; background: var(--primary); color: white; cursor: pointer; display: block; }
+        ol li { padding: 12px; background: #fffaf5; margin-bottom: 6px; border-radius: 8px; display: flex; justify-content: space-between; border-left: 4px solid var(--primary); font-size: 15px; }
+        .reveal-box { padding: 18px; border-radius: 12px; text-align: center; font-weight: 700; font-size: 18px; margin-top: 15px; }
+        .chart-bar { background: #f1f5f9; height: 25px; border-radius: 6px; margin: 8px 0; overflow: hidden; position: relative; border: 1px solid #e2e8f0; }
+        .chart-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s; }
+        .chart-text { position: absolute; left: 10px; top: 3px; font-size: 13px; font-weight: 600; }
+        
+        /* STILE CARD INSTAGRAM */
+        .instagram-card { display: none; margin-top: 25px; background: linear-gradient(135deg, #f97316 0%, #ec4899 100%); color: white; padding: 30px 20px; border-radius: 16px; text-align: center; box-shadow: 0 10px 20px rgba(236,72,153,0.3); border: 3px solid white; position: relative; overflow: hidden; }
+        .instagram-card::before { content: "📸 SCREENSHOTTA E CONDIVIDI!"; display: block; font-size: 10px; font-weight: 800; background: rgba(0,0,0,0.2); padding: 4px; margin-bottom: 15px; border-radius: 6px; letter-spacing: 1px; }
+        .instagram-card h4 { font-size: 22px; font-weight: 800; margin-bottom: 5px; text-shadow: 1px 1px 3px rgba(0,0,0,0.15); }
+        .instagram-card .sub { font-size: 13px; opacity: 0.9; font-weight: 600; margin-bottom: 20px; }
+        .instagram-card .rank-circle { width: 100px; height: 100px; background: white; color: #db2777; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 15px; font-weight: 800; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .instagram-card .rank-circle .num { font-size: 32px; line-height: 32px; }
+        .instagram-card .rank-circle .lbl { font-size: 11px; text-transform: uppercase; }
+        .instagram-card .footer-tag { font-size: 12px; font-weight: 700; opacity: 0.8; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="screen-join" class="screen" style="display: block;">
+        <h2>Benvenuto al Quiz! 🎂</h2>
+        <p style="margin-bottom: 15px;">Inserisci i tuoi dati per partecipare alla sfida.</p>
+        <input type="text" id="input-name" placeholder="Il tuo Nome o Nickname">
+        <input type="text" id="input-table" placeholder="Numero o Nome Tavolo">
+        <button id="btn-join" type="button">Entra nel Gioco</button>
+    </div>
+
+    <div id="screen-lobby" class="screen">
+        <h2>Sei dentro! 🎉</h2>
+        <p>Mettiti comodo. Inizieremo a breve.</p>
+        <div class="timer-box">Invitati in Lobby: <span id="lobby-count">0</span></div>
+    </div>
+
+    <div id="screen-question" class="screen">
+        <div class="question-counter">Domanda <span id="q-current">0</span> di <span id="q-total">0</span></div>
+        <h3 id="question-text" style="text-align: center; margin-bottom: 20px;">...</h3>
+        <div id="options-container"></div>
+        <div id="submit-feedback" style="display: none; text-align:center; font-weight:700; color:var(--primary); margin-bottom: 10px;">Risposta salvata! Attesa...</div>
+        <div class="timer-box">⏱️ Tempo: <span id="timer">20</span>s</div>
+    </div>
+
+    <div id="screen-results" class="screen">
+        <div class="question-counter" style="margin-bottom:20px;">Risultati Domanda <span id="res-q-current">0</span>/<span id="res-q-total">0</span></div>
+        <h2>Cosa ha votato la sala? 🤔</h2>
+        <div class="chart-bar"><div id="bar-0" class="chart-fill"></div><span id="text-0" class="chart-text">A: 0%</span></div>
+        <div class="chart-bar"><div id="bar-1" class="chart-fill"></div><span id="text-1" class="chart-text">B: 0%</span></div>
+        <div class="chart-bar"><div id="bar-2" class="chart-fill"></div><span id="text-2" class="chart-text">C: 0%</span></div>
+        <div class="chart-bar"><div id="bar-3" class="chart-fill"></div><span id="text-3" class="chart-text">D: 0%</span></div>
+    </div>
+
+    <div id="screen-reveal" class="screen">
+        <h2>Risultato 🥁</h2>
+        <div id="reveal-status" class="reveal-box"></div>
+    </div>
+
+    <div id="screen-leaderboard" class="screen">
+        <h2 id="user-rank-title">📊 Classifica Parziale</h2>
+        <div id="my-position-badge" class="my-position-badge"></div>
+        <div class="podium-container" id="user-podium">
+            <div class="podium-step step-2"><div>🥈</div><div id="u-p2-name">-</div><span id="u-p2-pts"></span></div>
+            <div class="podium-step step-1"><div>🥇</div><div id="u-p1-name">-</div><span id="u-p1-pts"></span></div>
+            <div class="podium-step step-3"><div>🥉</div><div id="u-p3-name">-</div><span id="u-p3-pts"></span></div>
+        </div>
+        <ol id="leaderboard-list"></ol>
+
+        <div class="instagram-card" id="insta-card">
+            <h4 id="insta-greet">Grande Sfida!</h4>
+            <div class="sub">Al Quiz Ufficiale di Silvia & Giorgio 🥂</div>
+            <div class="rank-circle">
+                <div class="num" id="insta-rank">-</div>
+                <div class="lbl">Posto</div>
+            </div>
+            <div style="font-weight: 700; font-size:16px;" id="insta-points">0 Punti</div>
+            <div class="footer-tag">#SilviaEGiorgioQuiz 🎂</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const socket = io();
+            let timerInterval = null;
+            let currentCorrectIndex = null;
+            let mySelectedAnswer = null;
+
+            const screens = {
+                join: document.getElementById('screen-join'),
+                lobby: document.getElementById('screen-lobby'),
+                question: document.getElementById('screen-question'),
+                results: document.getElementById('screen-results'),
+                reveal: document.getElementById('screen-reveal'),
+                leaderboard: document.getElementById('screen-leaderboard')
+            };
+
+            function showScreen(screenKey) {
+                clearInterval(timerInterval);
+                Object.keys(screens).forEach(key => {
+                    if(screens[key]) screens[key].style.display = 'none';
+                });
+                if(screens[screenKey]) screens[screenKey].style.display = 'block';
+            }
+
+            const btnJoin = document.getElementById('btn-join');
+            if (btnJoin) {
+                btnJoin.onclick = function() {
+                    const name = document.getElementById('input-name').value.trim();
+                    const table = document.getElementById('input-table').value.trim();
+                    if(!name) { alert("Per favore, inserisci almeno il tuo nome!"); return; }
+                    socket.emit('join-game', { name: name, table: table });
+                };
+            }
+
+            socket.on('join-success', () => { showScreen('lobby'); });
+
+            socket.on('players-count', (count) => {
+                const lobbyCountEl = document.getElementById('lobby-count');
+                if (lobbyCountEl) lobbyCountEl.innerText = count;
+            });
+
+            socket.on('init-state', (data) => {
+                if(data && data.playersCount) {
+                    const el = document.getElementById('lobby-count');
+                    if (el) el.innerText = data.playersCount;
+                }
+                showScreen('join');
+            });
+
+            socket.on('quiz-reset-triggered', () => {
+                mySelectedAnswer = null;
+                document.getElementById('input-name').value = "";
+                document.getElementById('input-table').value = "";
+                document.getElementById('insta-card').style.display = "none";
+                showScreen('join');
+            });
+
+            function drawStats(stats) {
+                if (!stats) return;
+                let total = stats.reduce((a, b) => a + b, 0) || 1;
+                stats.forEach((count, idx) => {
+                    const bar = document.getElementById("bar-" + idx);
+                    const txt = document.getElementById("text-" + idx);
+                    if(bar && txt) {
+                        let pct = Math.round((count / total) * 100);
+                        bar.style.width = pct + "%";
+                        txt.innerText = String.fromCharCode(65 + idx) + ": " + pct + "%";
+                    }
+                });
+            }
+
+            socket.on('state-updated', (data) => {
+                try {
+                    if (!data || !data.quizState) return;
+                    const status = data.quizState.status;
+                    const currentQuestion = data.currentQuestion;
+                    const players = data.players;
+                    const stats = data.stats;
+                    const isFinal = data.isFinal;
+                    const qNum = data.quizState.currentQuestionIndex + 1;
+                    const qTotal = data.totalQuestions || 11;
+                    
+                    // Aggiorna i contatori in tempo reale in tutte le schermate utili
+                    if(document.getElementById('q-current')) document.getElementById('q-current').innerText = qNum;
+                    if(document.getElementById('q-total')) document.getElementById('q-total').innerText = qTotal;
+                    if(document.getElementById('res-q-current')) document.getElementById('res-q-current').innerText = qNum;
+                    if(document.getElementById('res-q-total')) document.getElementById('res-q-total').innerText = qTotal;
+
+                    if (status === 'question' && currentQuestion) {
+                        showScreen('question');
+                        mySelectedAnswer = null;
+                        currentCorrectIndex = currentQuestion.correct;
+                        document.getElementById('question-text').innerText = currentQuestion.text;
+                        document.getElementById('submit-feedback').style.display = 'none';
+                        
+                        const container = document.getElementById('options-container');
+                        container.innerHTML = '';
+                        document.getElementById('timer').innerText = data.quizState.duration;
+                        
+                        timerInterval = setInterval(() => {
+                            let elapsed = Math.floor((Date.now() - data.quizState.timerStart) / 1000);
+                            let remaining = data.quizState.duration - elapsed;
+                            if (remaining <= 0) {
+                                remaining = 0;
+                                clearInterval(timerInterval);
+                                if(mySelectedAnswer === null) socket.emit('submit-answer', { answerIndex: -1, timeTaken: data.quizState.duration });
+                            }
+                            document.getElementById('timer').innerText = remaining;
+                        }, 250);
+
+                        currentQuestion.options.forEach((opt, index) => {
+                            const btn = document.createElement('button');
+                            btn.className = 'option-btn';
+                            btn.innerText = String.fromCharCode(65 + index) + ": " + opt;
+                            btn.onclick = () => {
+                                mySelectedAnswer = index;
+                                const timeTaken = (Date.now() - data.quizState.timerStart) / 1000;
+                                socket.emit('submit-answer', { answerIndex: index, timeTaken: timeTaken });
+                                document.getElementById('submit-feedback').style.display = 'block';
+                                const btns = container.getElementsByClassName('option-btn');
+                                for(let b of btns) b.disabled = true;
+                                btn.classList.add('selected');
+                            };
+                            container.appendChild(btn);
+                        });
+                    } 
+                    else if (status === 'results') {
+                        showScreen('results');
+                        if (stats) drawStats(stats);
+                    }
+                    else if (status === 'reveal') {
+                        showScreen('reveal');
+                        const revBox = document.getElementById('reveal-status');
+                        const letters = ["A", "B", "C", "D"];
+                        if (mySelectedAnswer === null || mySelectedAnswer === -1) {
+                            revBox.style.background = "#fed7aa"; revBox.style.color = "#c2410c";
+                            revBox.innerText = "Tempo Scaduto ⏱️! Era la " + letters[currentCorrectIndex];
+                        } else if (String(mySelectedAnswer) === String(currentCorrectIndex)) {
+                            revBox.style.background = "#d1fae5"; revBox.style.color = "#065f46";
+                            revBox.innerText = "Esatto 🎉! Corretta la " + letters[mySelectedAnswer];
+                        } else {
+                            revBox.style.background = "#fee2e2"; revBox.style.color = "#991b1b";
+                            revBox.innerText = "Sbagliato ❌! Risposto " + letters[mySelectedAnswer] + " (Corretta: " + letters[currentCorrectIndex] + ")";
+                        }
+                    }
+                    else if (status === 'leaderboard' && players) {
+                        showScreen('leaderboard');
+                        const list = document.getElementById('leaderboard-list');
+                        const podiumEl = document.getElementById('user-podium');
+                        const badgePos = document.getElementById('my-position-badge');
+                        const instaCard = document.getElementById('insta-card');
+                        list.innerHTML = '';
+                        
+                        const sorted = Object.values(players).sort((a, b) => b.score - a.score);
+                        const myRankIndex = sorted.findIndex(p => p.socketId === socket.id);
+                        
+                        if(myRankIndex !== -1 && badgePos) {
+                            badgePos.style.display = "block";
+                            badgePos.innerText = "🎖️ La tua posizione: " + (myRankIndex + 1) + "° Posto (" + sorted[myRankIndex].score + " pt)";
+                        }
+
+                        if (isFinal) {
+                            document.getElementById('user-rank-title').innerText = "🏆 PODIO FINALE 🏆";
+                            if(podiumEl) podiumEl.style.display = "flex";
+                            
+                            if(sorted[0]) { document.getElementById('u-p1-name').innerText = sorted[0].name; document.getElementById('u-p1-pts').innerText = sorted[0].score + "pt"; }
+                            if(sorted[1]) { document.getElementById('u-p2-name').innerText = sorted[1].name; document.getElementById('u-p2-pts').innerText = sorted[1].score + "pt"; }
+                            if(sorted[2]) { document.getElementById('u-p3-name').innerText = sorted[2].name; document.getElementById('u-p3-pts').innerText = sorted[2].score + "pt"; }
+
+                            if (sorted[0] && sorted[0].socketId === socket.id) {
+                                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+                            }
+
+                            sorted.slice(3, 6).forEach((p, i) => {
+                                const li = document.createElement('li');
+                                li.innerHTML = "<span>" + (i + 4) + ". <b>" + p.name + "</b> <small>(" + p.table + ")</small></span> <b>" + p.score + " pt</b>";
+                                list.appendChild(li);
+                            });
+
+                            // COMPILAZIONE ED ATTIVAZIONE CARD INSTAGRAM
+                            if(myRankIndex !== -1) {
+                                document.getElementById('insta-greet').innerText = "Sono arrivato " + (myRankIndex + 1) + "°!";
+                                document.getElementById('insta-rank').innerText = (myRankIndex + 1) + "°";
+                                document.getElementById('insta-points').innerText = sorted[myRankIndex].score + " Punti Totali";
+                                instaCard.style.display = "block";
+                            }
+                        } else {
+                            document.getElementById('user-rank-title').innerText = "📊 Classifica Parziale";
+                            if(podiumEl) podiumEl.style.display = "none";
+                            instaCard.style.display = "none";
+                            
+                            sorted.slice(0, 5).forEach((p, i) => {
+                                const li = document.createElement('li');
+                                li.innerHTML = "<span>" + (i + 1) + ". <b>" + p.name + "</b> <small>(" + p.table + ")</small></span> <b>" + p.score + " pt</b>";
+                                list.appendChild(li);
+                            });
+                        }
+                    }
+                } catch(err) {
+                    console.error("Errore nello stato:", err);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
