@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Host - Quiz 30 Anni</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --primary: #f97316;
+            --primary-hover: #ea580c;
+            --primary-light: #ffedd5;
+            --background: #f1f5f9;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: var(--background); color: var(--text); padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; background: var(--card-bg); padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .emergency-bar { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
+        .btn-sm { padding: 8px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; border: none; color: white; cursor: pointer; }
+        .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-danger { background: #ef4444; }
+        .btn-gray { background: #64748b; }
+        h1 { color: var(--primary); text-align: center; margin-bottom: 20px; }
+        .status-box { background: var(--primary-light); padding: 15px; border-radius: 12px; text-align: center; font-weight: 700; margin-bottom: 20px; font-size: 18px; }
+        .preview-box { background: #faf5ff; border: 1px dashed #c084fc; padding: 12px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; color: #581c87; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #f8fafc; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; }
+        .stat-card .num { font-size: 28px; font-weight: 700; color: var(--primary); }
+        .stat-card .label { font-size: 12px; color: #64748b; text-transform: uppercase; margin-top: 5px; }
+        button { width: 100%; padding: 16px; font-size: 18px; font-weight: 700; border: none; border-radius: 12px; color: white; cursor: pointer; transition: transform 0.1s; margin-bottom: 15px; }
+        button:active { transform: scale(0.98); }
+        .btn-orange { background: var(--primary); }
+        .btn-green { background: #10b981; }
+        .btn-blue { background: #3b82f6; }
+        .btn-purple { background: #8b5cf6; }
+        .btn-csv { background: #059669; margin-top: 15px; font-size: 16px; }
+        .chart-bar { background: #e2e8f0; height: 30px; border-radius: 6px; margin: 10px 0; overflow: hidden; position: relative; }
+        .chart-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.3s ease; }
+        .chart-text { position: absolute; left: 10px; top: 5px; font-size: 14px; font-weight: 600; color: #000; }
+        .podium-container { display: none; align-items: flex-end; justify-content: center; height: 180px; margin: 30px 0; gap: 15px; }
+        .podium-step { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 100px; border-radius: 12px 12px 0 0; color: white; font-weight: bold; padding-bottom: 15px; text-align: center; font-size: 14px; }
+        .podium-step span { display: block; font-size: 11px; font-weight: normal; opacity: 0.9; margin-top: 4px; padding: 0 5px; }
+        .step-2 { background: #cbd5e1; height: 120px; color: #1e293b; }
+        .step-1 { background: #fbbf24; height: 160px; color: #78350f; font-size: 16px; }
+        .step-3 { background: #b45309; height: 80px; }
+        ol li { padding: 12px; background: #f8fafc; margin-bottom: 6px; border-radius: 8px; display: flex; justify-content: space-between; border-left: 4px solid var(--primary); font-size: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="emergency-bar">
+            <button class="btn-sm btn-gray" id="btn-back-question" onclick="socket.emit('host-prev-question')">⬅️ Domanda Prec.</button>
+            <button class="btn-sm btn-danger" onclick="if(confirm('Vuoi resettare il quiz?')) socket.emit('host-reset-quiz')">🔄 Reset Quiz</button>
+        </div>
+
+        <h1>Console Host 🎛️</h1>
+        <div class="status-box">STATO: <span id="current-status">LOBBY</span> - DOMANDA: <span id="question-num">1</span> di <span id="question-total-host">0</span></div>
+        
+        <div class="preview-box" id="preview-box">🔮 Prossima Domanda (Anteprima): <span id="next-preview-text">-</span></div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="num" id="player-count">0</div>
+                <div class="label">Partecipanti Connessi</div>
+            </div>
+            <div class="stat-card">
+                <div class="num" id="answers-count">0</div>
+                <div class="label">Risposte Ricevute</div>
+            </div>
+        </div>
+
+        <div id="stats-section" style="display:none; margin-bottom: 25px;">
+            <h3>Distribuzione Risposte della Sala:</h3>
+            <div class="chart-bar"><div id="bar-0" class="chart-fill"></div><span id="text-0" class="chart-text">A: 0%</span></div>
+            <div class="chart-bar"><div id="bar-1" class="chart-fill"></div><span id="text-1" class="chart-text">B: 0%</span></div>
+            <div class="chart-bar"><div id="bar-2" class="chart-fill"></div><span id="text-2" class="chart-text">C: 0%</span></div>
+            <div class="chart-bar"><div id="bar-3" class="chart-fill"></div><span id="text-3" class="chart-text">D: 0%</span></div>
+            <p id="correct-summary" style="margin-top:15px; font-weight:700; color:#10b981; font-size:18px;"></p>
+        </div>
+
+        <div id="leaderboard-section" style="display:none; margin-bottom:25px;">
+            <h2 id="leaderboard-title">📊 Classifica Parziale</h2>
+            
+            <div class="podium-container" id="podium-box">
+                <div class="podium-step step-2"><div style="font-size:24px">🥈</div><div id="p2-name">-</div><span id="p2-table"></span></div>
+                <div class="podium-step step-1"><div style="font-size:24px">🥇</div><div id="p1-name">-</div><span id="p1-table"></span></div>
+                <div class="podium-step step-3"><div style="font-size:24px">🥉</div><div id="p3-name">-</div><span id="p3-table"></span></div>
+            </div>
+
+            <h3 id="list-title" style="margin-top:15px">Partecipanti in Gara (Tutti):</h3>
+            <ol id="host-leaderboard-list" style="list-style:none; margin-top:10px;"></ol>
+            
+            <button id="btn-download-csv" class="btn-csv" style="display:none;">📥 Scarica Classifica Completa (CSV)</button>
+        </div>
+
+        <div id="action-controls"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        let globalPlayersData = {}; 
+
+        const txtStatus = document.getElementById('current-status');
+        const txtQuestionNum = document.getElementById('question-num');
+        const txtQuestionTotal = document.getElementById('question-total-host');
+        const txtPlayers = document.getElementById('player-count');
+        const txtAnswers = document.getElementById('answers-count');
+        const controls = document.getElementById('action-controls');
+        const statsSection = document.getElementById('stats-section');
+        const leaderboardSection = document.getElementById('leaderboard-section');
+        const leaderboardList = document.getElementById('host-leaderboard-list');
+        const podiumBox = document.getElementById('podium-box');
+        const previewBox = document.getElementById('preview-box');
+        const nextPreviewText = document.getElementById('next-preview-text');
+        const btnCsv = document.getElementById('btn-download-csv');
+
+        function renderControls(status, isFinal) {
+            txtStatus.innerText = status.toUpperCase();
+            controls.innerHTML = "";
+            document.getElementById('btn-back-question').disabled = (status === "lobby");
+
+            if (status === "lobby") {
+                statsSection.style.display = "none";
+                leaderboardSection.style.display = "none";
+                previewBox.style.display = "none";
+                const btn = document.createElement('button');
+                btn.className = "btn-green"; btn.innerText = "Avvia Quiz 🚀";
+                btn.onclick = () => socket.emit('host-set-status', 'question');
+                controls.appendChild(btn);
+            } 
+            else if (status === "question") {
+                statsSection.style.display = "block";
+                leaderboardSection.style.display = "none";
+                previewBox.style.display = "block";
+                const btn = document.createElement('button');
+                btn.className = "btn-orange"; btn.innerText = "Forza Chiusura Anticipata ⏱️";
+                btn.onclick = () => socket.emit('host-set-status', 'results');
+                controls.appendChild(btn);
+            } 
+            else if (status === "results") {
+                statsSection.style.display = "block";
+                leaderboardSection.style.display = "none";
+                const btn = document.createElement('button');
+                btn.className = "btn-blue"; btn.innerText = "Svela Risposta Corretta 👁️";
+                btn.onclick = () => socket.emit('host-set-status', 'reveal');
+                controls.appendChild(btn);
+            } 
+            else if (status === "reveal") {
+                statsSection.style.display = "block";
+                leaderboardSection.style.display = "none";
+                
+                const btnRank = document.createElement('button');
+                btnRank.className = "btn-purple"; 
+                btnRank.innerText = isFinal ? "🏆 MOSTRA IL PODIO FINALE 🏆" : "Mostra Classifica Completa 📊";
+                btnRank.onclick = () => socket.emit('host-set-status', 'leaderboard');
+                controls.appendChild(btnRank);
+
+                if(!isFinal) {
+                    const btnNext = document.createElement('button');
+                    btnNext.className = "btn-orange"; btnNext.innerText = "Prossima Domanda (Nascondi Classifica) ➡️";
+                    btnNext.onclick = () => socket.emit('host-next-question');
+                    controls.appendChild(btnNext);
+                }
+            }
+            else if (status === "leaderboard") {
+                statsSection.style.display = "none";
+                leaderboardSection.style.display = "block";
+                
+                if (isFinal) {
+                    previewBox.style.display = "none";
+                    controls.innerHTML = "<h2 style='text-align:center; color:#10b981;'>FINALE CELEBRATO! 🎂</h2>";
+                    let duration = 5 * 1000; let end = Date.now() + duration;
+                    (function frame() {
+                        confetti({ particleCount: 4, angle: 60, spread: 60, origin: { x: 0 } });
+                        confetti({ particleCount: 4, angle: 120, spread: 60, origin: { x: 1 } });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
+                } else {
+                    const btnNext = document.createElement('button');
+                    btnNext.className = "btn-orange"; btnNext.innerText = "Prossima Domanda ➡️";
+                    btnNext.onclick = () => socket.emit('host-next-question');
+                    controls.appendChild(btnNext);
+                }
+            }
+        }
+
+        function updateStatsBars(stats) {
+            let total = stats.reduce((a, b) => a + b, 0) || 1;
+            stats.forEach((count, idx) => {
+                let pct = Math.round((count / total) * 100);
+                document.getElementById("bar-" + idx).style.width = pct + "%";
+                document.getElementById("text-" + idx).innerText = String.fromCharCode(65 + idx) + ": " + pct + "% (" + count + " voti)";
+            });
+        }
+
+        function updateLeaderboardData(players, isFinal) {
+            leaderboardList.innerHTML = '';
+            globalPlayersData = players; 
+            const sorted = Object.values(players).sort((a, b) => b.score - a.score);
+            
+            if (isFinal) {
+                document.getElementById('leaderboard-title').innerText = "🏆 CLASSIFICA FINALE 🏆";
+                document.getElementById('list-title').innerText = "Classifica Completa di tutti i Partecipanti:";
+                podiumBox.style.display = "flex";
+                btnCsv.style.display = "block"; 
+                
+                if(sorted[0]) { document.getElementById('p1-name').innerText = sorted[0].name; document.getElementById('p1-table').innerText = sorted[0].score + "pt (" + sorted[0].table + ")"; }
+                if(sorted[1]) { document.getElementById('p2-name').innerText = sorted[1].name; document.getElementById('p2-table').innerText = sorted[1].score + "pt (" + sorted[1].table + ")"; }
+                if(sorted[2]) { document.getElementById('p3-name').innerText = sorted[2].name; document.getElementById('p3-table').innerText = sorted[2].score + "pt (" + sorted[2].table + ")"; }
+            } else {
+                document.getElementById('leaderboard-title').innerText = "📊 Classifica Parziale";
+                document.getElementById('list-title').innerText = "Classifica Completa degli invitati (Ordinata):";
+                podiumBox.style.display = "none";
+                btnCsv.style.display = "none";
+            }
+
+            // MODIFICATO: Mostra sempre TUTTI i giocatori su host sia in parziale che finale
+            sorted.forEach((p, i) => {
+                const li = document.createElement('li');
+                li.innerHTML = "<span>" + (i + 1) + ". <b>" + p.name + "</b> <small>(" + p.table + ")</small></span> <b>" + p.score + " pt</b>";
+                leaderboardList.appendChild(li);
+            });
+        }
+
+        btnCsv.onclick = () => {
+            const sorted = Object.values(globalPlayersData).sort((a, b) => b.score - a.score);
+            let csvContent = "data:text/csv;charset=utf-8,Posizione,Nome,Tavolo,Punteggio\n";
+            sorted.forEach((p, i) => {
+                csvContent += (i+1) + ',"' + p.name.replace(/"/g, '""') + '","' + p.table.replace(/"/g, '""') + '",' + p.score + "\n";
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "classifica_quiz_30_anni.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        socket.on('state-updated', (data) => {
+            txtQuestionNum.innerText = data.quizState.currentQuestionIndex + 1;
+            if(data.totalQuestions) txtQuestionTotal.innerText = data.totalQuestions;
+            txtAnswers.innerText = data.answersCount || "0";
+            if(data.nextQuestionPreview) nextPreviewText.innerText = data.nextQuestionPreview;
+            renderControls(data.quizState.status, data.isFinal);
+            if (data.stats) updateStatsBars(data.stats);
+            if (data.players) updateLeaderboardData(data.players, data.isFinal);
+
+            if (data.correctCount !== undefined && data.currentQuestion) {
+                const letters = ["A", "B", "C", "D"];
+                document.getElementById('correct-summary').innerText = 
+                    data.quizState.status === "reveal" ? "Risposta Corretta: " + letters[parseInt(data.currentQuestion.correct)] + " (" + data.correctCount + " risposte esatte!)" : "";
+            }
+        });
+
+        socket.on('answers-updated', (data) => {
+            txtAnswers.innerText = data.answersCount;
+            if (data.stats) updateStatsBars(data.stats);
+        });
+
+        socket.on('init-state', (data) => {
+            txtPlayers.innerText = data.playersCount;
+            txtAnswers.innerText = data.answersCount;
+            txtQuestionNum.innerText = data.quizState.currentQuestionIndex + 1;
+            if(data.totalQuestions) txtQuestionTotal.innerText = data.totalQuestions;
+            renderControls(data.quizState.status, false);
+            if (data.stats) updateStatsBars(data.stats);
+        });
+
+        socket.on('players-count', (count) => txtPlayers.innerText = count);
+    </script>
+</body>
+</html>
